@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-from pathlib import Path
 from threading import Event
 from typing import List, Tuple, Dict, Any, Optional, Generator
 import time
@@ -26,7 +25,7 @@ class ReTransfer(_PluginBase):
     # 插件图标
     plugin_icon = "directory.png"
     # 插件版本
-    plugin_version = "0.5"
+    plugin_version = "0.6"
     # 插件作者
     plugin_author = "Akimio521"
     # 作者主页
@@ -42,19 +41,20 @@ class ReTransfer(_PluginBase):
     transferhis = TransferHistoryOper()
     storagechain = StorageChain()
 
-    _scheduler = None
+    _scheduler: BackgroundScheduler | None = None
     # 限速开关
-    _enabled = False
-    _onlyonce = False
+    _enabled: bool
+    _onlyonce: bool
+    _background: bool  # 后台刮削
 
-    _transfer_type = "copy"  # 转移模式
+    _transfer_type: str  # 转移模式
     _scrape: bool  # 是否刮削
     _library_type_folder: bool  # 是否按类型建立文件夹
     _library_category_folder: bool  # 是否按分类建立文件夹
     _source_type: str  # 原媒体库类型
-    _source_path = ""  # 原媒体库路径
+    _source_path: str  # 原媒体库路径
     _target_type: str  # 目标媒体库类型
-    _target_path = ""  # 新媒体库路径
+    _target_path: str  # 新媒体库路径
     # 退出事件
     _event = Event()
 
@@ -64,6 +64,7 @@ class ReTransfer(_PluginBase):
         if config:
             self._enabled = config.get("enabled") or False
             self._onlyonce = config.get("onlyonce") or False
+            self._background = config.get("background") or True
             self._transfer_type = config.get("transfer_type") or "copy"
             self._scrape = config.get("scrape") or True
             self._library_type_folder = config.get("library_type_folder") or True
@@ -83,6 +84,7 @@ class ReTransfer(_PluginBase):
 
             if self._onlyonce:
                 __c = {
+                    "后台刮削": self._background,
                     "转移模式": self._transfer_type,
                     "是否刮削": self._scrape,
                     "是否按类型建立文件夹": self._library_type_folder,
@@ -107,6 +109,7 @@ class ReTransfer(_PluginBase):
                     {
                         "onlyonce": False,
                         "enabled": self._enabled,
+                        "background": self._background,
                         "transfer_type": self._transfer_type,
                         "scrape": self._scrape,
                         "library_type_folder": self._library_type_folder,
@@ -145,7 +148,7 @@ class ReTransfer(_PluginBase):
                         "content": [
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 6},
+                                "props": {"cols": 12, "md": 4},
                                 "content": [
                                     {
                                         "component": "VSwitch",
@@ -158,13 +161,26 @@ class ReTransfer(_PluginBase):
                             },
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 6},
+                                "props": {"cols": 12, "md": 4},
                                 "content": [
                                     {
                                         "component": "VSwitch",
                                         "props": {
                                             "model": "onlyonce",
                                             "label": "立即运行一次",
+                                        },
+                                    }
+                                ],
+                            },
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 4},
+                                "content": [
+                                    {
+                                        "component": "VSwitch",
+                                        "props": {
+                                            "model": "background",
+                                            "label": "后台刮削",
                                         },
                                     }
                                 ],
@@ -316,7 +332,7 @@ class ReTransfer(_PluginBase):
         ], {"enabled": False, "mode": "", "transfer_paths": "", "err_hosts": ""}
 
     def get_page(self) -> List[dict]:
-        return []
+        pass
 
     def __re_transfer(self):
         """
@@ -359,7 +375,7 @@ class ReTransfer(_PluginBase):
                 from_history=True,
             )
             response: Response = manual_transfer(
-                transer_item=transer_item, background=False
+                transer_item=transer_item, background=self._background
             )
             if response.success:
                 sucess_count += 1
@@ -368,7 +384,7 @@ class ReTransfer(_PluginBase):
                 logger.warning(f"{history.src}重新整理失败：{response.message}")
 
         logger.info(
-            f"成功{sucess_count}条，失败{error_count}条！总耗时{(time.time()-start_time) / 60 :2f}分钟"
+            f"重新整理完成。成功{sucess_count}条，失败{error_count}条！总耗时{(time.time()-start_time) / 60 :2f}分钟"
         )
 
     def __list_files(
