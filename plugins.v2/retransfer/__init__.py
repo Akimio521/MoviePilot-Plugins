@@ -8,18 +8,15 @@ import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
 
 
-from app.schemas import ManualTransferItem, EpisodeFormat
-from app.schemas.file import FileItem
-from app.chain.transfer import TransferChain
-from app.chain.storage import StorageChain
+from app.api.endpoints.transfer import manual_transfer
 from app.core.config import settings
-from app.core.metainfo import MetaInfoPath
+from app.schemas import  ManualTransferItem,Response
 from app.db.transferhistory_oper import TransferHistoryOper
 from app.db.models.transferhistory import TransferHistory
 from app.log import logger
 from app.plugins import _PluginBase
-from app.schemas import MediaType
 from app.utils.system import SystemUtils
+from app.utils.http import RequestUtils
 
 
 class ReTransfer(_PluginBase):
@@ -30,7 +27,7 @@ class ReTransfer(_PluginBase):
     # 插件图标
     plugin_icon = "directory.png"
     # 插件版本
-    plugin_version = "0.3"
+    plugin_version = "0.4"
     # 插件作者
     plugin_author = "Akimio521"
     # 作者主页
@@ -44,8 +41,9 @@ class ReTransfer(_PluginBase):
 
     # 私有属性
     transferhis = None
-    storagechain = None
-    transferchain = None
+
+    req = None
+    
     _scheduler = None
     # 限速开关
     _enabled = False
@@ -79,18 +77,18 @@ class ReTransfer(_PluginBase):
         # 立即运行一次
         if self._enabled and self._onlyonce:
             self.transferhis = TransferHistoryOper()
-            self.storagechain = StorageChain()
-            self.transferchain = TransferChain()
+            self.req = RequestUtils()
 
             if self._onlyonce:
-                logger.info(f"重新整理媒体库服务，立即运行一次，配置：",{
+                __c = {
                     "转移模式": self._transfer_type,
                     "是否刮削": self._scrape,
                     "是否按类型建立文件夹": self._library_type_folder,
                     "是否按分类建立文件夹": self._library_category_folder,
                     "原媒体库路径": self._source_path,
                     "新媒体库路径": self._target_path
-                })
+                }
+                logger.info(f"重新整理媒体库服务，立即运行一次，配置：{__c}")
                 self._scheduler = BackgroundScheduler(timezone=settings.TZ)
                 self._scheduler.add_job(func=self.__re_transfer, trigger='date',
                                         run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
@@ -313,72 +311,29 @@ class ReTransfer(_PluginBase):
         sucess_count = 0
         
         for path in paths:
-            history: TransferHistory = self.transferhis.get_by_src(str(path))
+            history:TransferHistory = self.transferhis.get_by_src(str(path))
             if  not history:
                 total -= 1
                 continue
 
-            # 重新整理
-            if history.status and ("move" in history.mode):# 重新整理成功的转移，则使用成功的 dest 做 in_path
-                src_fileitem = FileItem(**history.dest_fileitem)
-            else:
-                # 源路径
-                src_fileitem = FileItem(**history.src_fileitem)
-                # 目的路径
-                if history.dest_fileitem:
-                    # 删除旧的已整理文件
-                    dest_fileitem = FileItem(**history.dest_fileitem)
-                    state = self.storagechain.delete_media_file(dest_fileitem, mtype=MediaType(history.type))
-                    if not state:
-                        return logger.warning(f"删除已整理文件失败：{dest_fileitem.storage} {dest_fileitem.path}")
-            transer_item = ManualTransferItem()
-            transer_item.type_name = str(history.type) if history.type else transer_item.type_name
-            transer_item.tmdbid = int(history.tmdbid) if history.tmdbid else transer_item.tmdbid
-            transer_item.doubanid = str(history.doubanid) if history.doubanid else transer_item.doubanid
-            transer_item.season = int(str(history.seasons).replace("S", "")) if history.seasons else transer_item.season
-            if history.episodes:
-                if "-" in str(history.episodes):# E01-E03多集合并
-                    episode_start, episode_end = str(history.episodes).split("-")
-                    episode_list: List[int] = []
-                    for i in range(int(episode_start.replace("E", "")), int(episode_end.replace("E", "")) + 1):
-                        episode_list.append(i)
-                    transer_item.episode_detail = ",".join(str(e) for e in episode_list)
-                else:# E01单集
-                    transer_item.episode_detail = str(history.episodes).replace("E", "")
-            
-            # 类型
-            mtype = MediaType(transer_item.type_name) if transer_item.type_name else None
-            # 自定义格式
-            epformat = None
-            if transer_item.episode_offset or transer_item.episode_part \
-                    or transer_item.episode_detail or transer_item.episode_format:
-                epformat = EpisodeFormat(
-                    format=transer_item.episode_format,
-                    detail=transer_item.episode_detail,
-                    part=transer_item.episode_part,
-                    offset=transer_item.episode_offset,
-                )
-            state, errormsg = self.transferchain.manual_transfer(
-                fileitem=src_fileitem,
-                target_storage=transer_item.target_storage,
-                target_path=self._target_path,
-                tmdbid=transer_item.tmdbid,
-                doubanid=transer_item.doubanid,
-                mtype=mtype,
-                season=transer_item.season,
-                epformat=epformat,
-                scrape=self._scrape,
-                library_type_folder=self._library_type_folder,
-                library_category_folder=self._library_category_folder,
-                force=True,
-                background=True
+            history.id
+            target_storage = history.dest_storage
+            transer_item = ManualTransferItem(logid=history.id, 
+                            target_storage=target_storage,
+                            transfer_type=self._transfer_type, 
+                            target_path=self._target_path,
+                            min_filesize=0,
+                            scrape=self._scrape, 
+                            library_type_folder=self._library_type_folder, library_category_folder=self._library_category_folder,
+                            from_history=True,
             )
-            if not state:
-                logger.error(f"重新整理失败：{src_fileitem.storage} {src_fileitem.path} {errormsg}")
-                error_count += 1
-            else:
-                logger.debug(f"重新整理成功：{src_fileitem.storage} {src_fileitem.path}")
+            response:Response = manual_transfer(transer_item=transer_item, background=False)
+            if response.success:
                 sucess_count += 1
+            else:
+                error_count += 1
+                logger.warning(f"{history.src}重新整理失败：{response.message}")
+
         logger.info(f"共有{total}条记录，成功{sucess_count}条，失败{error_count}条！总耗时{(time.time()-start_time) / 60 :2f}分钟")
 
 
