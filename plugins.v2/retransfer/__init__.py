@@ -10,7 +10,7 @@ from apscheduler.schedulers.background import BackgroundScheduler  # type: ignor
 from app.api.endpoints.transfer import manual_transfer
 from app.core.config import settings
 from app.chain.storage import StorageChain
-from app.schemas import ManualTransferItem, Response, FileItem
+from app.schemas import ManualTransferItem, Response, FileItem, NotificationType
 from app.schemas.types import StorageSchema
 from app.db.transferhistory_oper import TransferHistoryOper
 from app.log import logger
@@ -25,7 +25,7 @@ class ReTransfer(_PluginBase):
     # 插件图标
     plugin_icon = "directory.png"
     # 插件版本
-    plugin_version = "0.7"
+    plugin_version = "0.8"
     # 插件作者
     plugin_author = "Akimio521"
     # 作者主页
@@ -46,6 +46,7 @@ class ReTransfer(_PluginBase):
 
     _onlyonce: bool  # 立即运行
     _background: bool  # 后台转移
+    _notify: bool  # 完成通知
 
     _transfer_type: str  # 转移模式
     _scrape: bool  # 是否刮削
@@ -55,19 +56,20 @@ class ReTransfer(_PluginBase):
     _source_path: str  # 原媒体库路径
     _target_type: str  # 目标媒体库类型
     _target_path: str  # 新媒体库路径
-    # 退出事件
-    _event = Event()
+
+    _event = Event()  # 退出事件
 
     def init_plugin(self, config: Optional[Dict[str, Any]] = None):
         # 读取配置
         if config:
             self._onlyonce = config.get("onlyonce") or False
             self._background = config.get("background") or True
+            self._notify = config.get("notify") or False
             self._transfer_type = config.get("transfer_type") or "copy"
             self._scrape = config.get("scrape") or True
-            self._library_type_folder = config.get("library_type_folder") or True
+            self._library_type_folder = config.get("library_type_folder") or False
             self._library_category_folder = (
-                config.get("library_category_folder") or True
+                config.get("library_category_folder") or False
             )
             self._source_type = config.get("source_type") or StorageSchema.Local.value
             self._source_path = config.get("source_path") or ""
@@ -150,6 +152,19 @@ class ReTransfer(_PluginBase):
                                         "props": {
                                             "model": "onlyonce",
                                             "label": "立即运行一次",
+                                        },
+                                    }
+                                ],
+                            },
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 4},
+                                "content": [
+                                    {
+                                        "component": "VSwitch",
+                                        "props": {
+                                            "model": "notify",
+                                            "label": "完成通知",
                                         },
                                     }
                                 ],
@@ -363,9 +378,18 @@ class ReTransfer(_PluginBase):
                 error_count += 1
                 logger.warning(f"{history.src}重新整理失败：{response.message}")
 
-        logger.info(
-            f"重新整理完成。成功{sucess_count}条，失败{error_count}条！总耗时{(time.time()-start_time) / 60 :2f}分钟"
-        )
+        msg: List[str] = [
+            f"成功整理 {sucess_count} 条",
+            f"失败整理 {error_count} 条",
+            f"总耗时 {(time.time()-start_time) / 60 :2f} 分钟",
+        ]
+        logger.info(f"重新整理完成，{'、'.join(msg)}。")
+        if self._notify:
+            self.post_message(
+                mtype=NotificationType.Plugin,
+                title="【插件】重新整理完成",
+                text="\n".join(msg),
+            )
         self._enabled = False
 
     def __list_files(
@@ -375,7 +399,6 @@ class ReTransfer(_PluginBase):
     ) -> Generator[FileItem, None, None]:
         file = FileItem(storage=storage_type, path=starge_path)
         files = self.storagechain.list_files(file, True)
-        # print(files)
         if not files:
             return None
         for f in files:
@@ -387,7 +410,7 @@ class ReTransfer(_PluginBase):
             ):
                 yield f
             else:
-                print(f"跳过：{f}")
+                logger.debug(f"忽略文件：【{storage_type}】{f.path}")
 
     def stop_service(self):
         """
