@@ -25,7 +25,7 @@ class ReTransfer(_PluginBase):
     # 插件图标
     plugin_icon = "directory.png"
     # 插件版本
-    plugin_version = "0.8"
+    plugin_version = "0.8-1"
     # 插件作者
     plugin_author = "Akimio521"
     # 作者主页
@@ -66,7 +66,7 @@ class ReTransfer(_PluginBase):
             self._background = config.get("background") or True
             self._notify = config.get("notify") or False
             self._transfer_type = config.get("transfer_type") or "copy"
-            self._scrape = config.get("scrape") or True
+            self._scrape = config.get("scrape") or False
             self._library_type_folder = config.get("library_type_folder") or False
             self._library_category_folder = (
                 config.get("library_category_folder") or False
@@ -356,11 +356,9 @@ class ReTransfer(_PluginBase):
                 logger.warning(f"【{self._source_type}】{file.path}未找到整理记录！")
                 continue
 
-            history.id
-            target_storage = history.dest_storage
             transer_item = ManualTransferItem(
                 logid=history.id,
-                target_storage=target_storage,
+                target_storage=self._target_type,
                 transfer_type=self._transfer_type,
                 target_path=self._target_path,
                 min_filesize=0,
