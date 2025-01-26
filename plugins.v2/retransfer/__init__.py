@@ -30,7 +30,7 @@ class ReTransfer(_PluginBase):
     # 插件图标
     plugin_icon = "directory.png"
     # 插件版本
-    plugin_version = "0.2"
+    plugin_version = "0.3"
     # 插件作者
     plugin_author = "Akimio521"
     # 作者主页
@@ -47,13 +47,16 @@ class ReTransfer(_PluginBase):
     storagechain = None
     transferchain = None
     _scheduler = None
-    _scraper = None
     # 限速开关
     _enabled = False
     _onlyonce = False
-    _mode = ""
-    _source_path = ""
-    _target_path = ""
+
+    _transfer_type = "copy" # 转移模式
+    _scrape = True # 是否刮削
+    _library_type_folder = True # 是否按类型建立文件夹
+    _library_category_folder = True # 是否按分类建立文件夹
+    _source_path = "" # 原媒体库路径
+    _target_path = "" # 新媒体库路径
     # 退出事件
     _event = Event()
 
@@ -63,7 +66,10 @@ class ReTransfer(_PluginBase):
         if config:
             self._enabled = config.get("enabled")
             self._onlyonce = config.get("onlyonce")
-            self._mode = config.get("mode") or ""
+            self._transfer_type = config.get("transfer_type") or "copy"
+            self._scrape = config.get("scrape") or True
+            self._library_type_folder = config.get("library_type_folder") or True
+            self._library_category_folder = config.get("library_category_folder") or True
             self._source_path = config.get("source_path") or ""
             self._target_path = config.get("target_path") or ""
 
@@ -77,7 +83,14 @@ class ReTransfer(_PluginBase):
             self.transferchain = TransferChain()
 
             if self._onlyonce:
-                logger.info(f"重新整理媒体库服务，立即运行一次")
+                logger.info(f"重新整理媒体库服务，立即运行一次，配置：",{
+                    "转移模式": self._transfer_type,
+                    "是否刮削": self._scrape,
+                    "是否按类型建立文件夹": self._library_type_folder,
+                    "是否按分类建立文件夹": self._library_category_folder,
+                    "原媒体库路径": self._source_path,
+                    "新媒体库路径": self._target_path
+                })
                 self._scheduler = BackgroundScheduler(timezone=settings.TZ)
                 self._scheduler.add_job(func=self.__re_transfer, trigger='date',
                                         run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
@@ -87,7 +100,10 @@ class ReTransfer(_PluginBase):
                 self.update_config({
                     "onlyonce": False,
                     "enabled": self._enabled,
-                    "mode": self._mode,
+                    "transfer_type": self._transfer_type,
+                    "scrape": self._scrape,
+                    "library_type_folder": self._library_type_folder,
+                    "library_category_folder": self._library_category_folder,
                     "source_path": self._source_path,
                     "target_path": self._target_path
                 })
@@ -158,18 +174,65 @@ class ReTransfer(_PluginBase):
                                 'component': 'VCol',
                                 'props': {
                                     'cols': 12,
-                                    'md': 6
+                                    'md': 3
                                 },
                                 'content': [
                                     {
                                         'component': 'VSelect',
                                         'props': {
-                                            'model': 'mode',
-                                            'label': '覆盖模式',
+                                            'model': 'transfer_type',
+                                            'label': '转移模式',
                                             'items': [
-                                                {'title': '不覆盖已有元数据', 'value': ''},
-                                                {'title': '覆盖所有元数据和图片', 'value': 'force_all'},
+                                                {'title': '复制', 'value': 'copy'},
+                                                {'title': '移动', 'value': 'move'},
+                                                {'title': '硬链接', 'value': 'link'},
+                                                {'title': '软链接', 'value': 'softlink'},
                                             ]
+                                        }
+                                    }
+                                ]
+                            },{
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 3
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VSwitch',
+                                        'props': {
+                                            'model': 'scrape',
+                                            'label': '是否刮削',
+                                        }
+                                    }
+                                ]
+                            },{
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 3
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VSwitch',
+                                        'props': {
+                                            'model': 'library_type_folder',
+                                            'label': '是否按类型建立文件夹',
+                                        }
+                                    }
+                                ]
+                            },{
+                                'component': 'VCol',
+                                'props': {
+                                    'cols': 12,
+                                    'md': 3
+                                },
+                                'content': [
+                                    {
+                                        'component': 'VSwitch',
+                                        'props': {
+                                            'model': 'library_category_folder',
+                                            'label': '是否按分类建立文件夹',
                                         }
                                     }
                                 ]
@@ -190,7 +253,7 @@ class ReTransfer(_PluginBase):
                                         'props': {
                                             'model': 'source_path',
                                             'label': '重新整理路径',
-                                            'rows': 5,
+                                            'rows': 2,
                                             'placeholder': '一个目录'
                                         }
                                     }
@@ -212,30 +275,8 @@ class ReTransfer(_PluginBase):
                                         'props': {
                                             'model': 'target_path',
                                             'label': '目标媒体库路径',
-                                            'rows': 5,
+                                            'rows': 2,
                                             'placeholder': '一个目录'
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VRow',
-                        'content': [
-                            {
-                                'component': 'VCol',
-                                'props': {
-                                    'cols': 12,
-                                },
-                                'content': [
-                                    {
-                                        'component': 'VAlert',
-                                        'props': {
-                                            'type': 'info',
-                                            'variant': 'tonal',
-                                            'text': '刮削路径后拼接#电视剧/电影，强制指定该媒体路径媒体类型。'
-                                                    '不加默认根据文件名自动识别媒体类型。'
                                         }
                                     }
                                 ]
@@ -320,17 +361,15 @@ class ReTransfer(_PluginBase):
             state, errormsg = self.transferchain.manual_transfer(
                 fileitem=src_fileitem,
                 target_storage=transer_item.target_storage,
-                target_path=self._source_path,
+                target_path=self._target_path,
                 tmdbid=transer_item.tmdbid,
                 doubanid=transer_item.doubanid,
                 mtype=mtype,
                 season=transer_item.season,
-                transfer_type=transer_item.transfer_type,
                 epformat=epformat,
-                min_filesize=transer_item.min_filesize,
-                scrape=transer_item.scrape,
-                library_type_folder=transer_item.library_type_folder,
-                library_category_folder=transer_item.library_category_folder,
+                scrape=self._scrape,
+                library_type_folder=self._library_type_folder,
+                library_category_folder=self._library_category_folder,
                 force=True,
                 background=True
             )

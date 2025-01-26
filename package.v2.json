@@ -3,11 +3,12 @@
         "name": "重新整理",
         "description": "从数据库中获取已成功整理视频的信息，重新整理到指定目录。",
         "labels": "媒体库工具",
-        "version": "0.2",
+        "version": "0.3",
         "icon": "directory.png",
         "author": "Akimio521",
         "level": 2,
         "history": {
+            "0.3": "提供更多参数设置",
             "0.2": "修复变量名错误",
             "0.1": "测试版本"
         }
