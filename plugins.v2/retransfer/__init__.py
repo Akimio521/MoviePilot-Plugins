@@ -30,7 +30,7 @@ class ReTransfer(_PluginBase):
     # 插件图标
     plugin_icon = "directory.png"
     # 插件版本
-    plugin_version = "0.1"
+    plugin_version = "0.2"
     # 插件作者
     plugin_author = "Akimio521"
     # 作者主页
@@ -65,7 +65,7 @@ class ReTransfer(_PluginBase):
             self._onlyonce = config.get("onlyonce")
             self._mode = config.get("mode") or ""
             self._source_path = config.get("source_path") or ""
-            self._source_path = config.get("target_path") or ""
+            self._target_path = config.get("target_path") or ""
 
         # 停止现有任务
         self.stop_service()
