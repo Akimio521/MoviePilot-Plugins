@@ -25,7 +25,7 @@ class ReTransfer(_PluginBase):
     # 插件图标
     plugin_icon = "directory.png"
     # 插件版本
-    plugin_version = "0.6"
+    plugin_version = "0.7"
     # 插件作者
     plugin_author = "Akimio521"
     # 作者主页
@@ -42,10 +42,10 @@ class ReTransfer(_PluginBase):
     storagechain = StorageChain()
 
     _scheduler: BackgroundScheduler | None = None
-    # 限速开关
-    _enabled: bool
-    _onlyonce: bool
-    _background: bool  # 后台刮削
+    _enabled: bool = False  # 运行状态
+
+    _onlyonce: bool  # 立即运行
+    _background: bool  # 后台转移
 
     _transfer_type: str  # 转移模式
     _scrape: bool  # 是否刮削
@@ -59,10 +59,8 @@ class ReTransfer(_PluginBase):
     _event = Event()
 
     def init_plugin(self, config: Optional[Dict[str, Any]] = None):
-
         # 读取配置
         if config:
-            self._enabled = config.get("enabled") or False
             self._onlyonce = config.get("onlyonce") or False
             self._background = config.get("background") or True
             self._transfer_type = config.get("transfer_type") or "copy"
@@ -80,50 +78,47 @@ class ReTransfer(_PluginBase):
         self.stop_service()
 
         # 立即运行一次
-        if self._enabled and self._onlyonce:
-
-            if self._onlyonce:
-                __c = {
-                    "后台刮削": self._background,
-                    "转移模式": self._transfer_type,
-                    "是否刮削": self._scrape,
-                    "是否按类型建立文件夹": self._library_type_folder,
-                    "是否按分类建立文件夹": self._library_category_folder,
-                    "原媒体库类型": self._source_type,
-                    "原媒体库路径": self._source_path,
-                    "新媒体库类型": self._target_type,
-                    "新媒体库路径": self._target_path,
+        if self._onlyonce:
+            __c = {
+                "后台转移": self._background,
+                "转移模式": self._transfer_type,
+                "是否刮削": self._scrape,
+                "是否按类型建立文件夹": self._library_type_folder,
+                "是否按分类建立文件夹": self._library_category_folder,
+                "原媒体库类型": self._source_type,
+                "原媒体库路径": self._source_path,
+                "新媒体库类型": self._target_type,
+                "新媒体库路径": self._target_path,
+            }
+            logger.info(f"重新整理媒体库服务，立即运行一次，配置：{__c}")
+            self._enabled = True
+            self._scheduler = BackgroundScheduler(timezone=settings.TZ)
+            self._scheduler.add_job(
+                func=self.__re_transfer,
+                trigger="date",
+                run_date=datetime.now(tz=pytz.timezone(settings.TZ))
+                + timedelta(seconds=3),
+                name="重新整理媒体库",
+            )
+            # 关闭一次性开关
+            self._onlyonce = False
+            self.update_config(
+                {
+                    "onlyonce": self._onlyonce,
+                    "transfer_type": self._transfer_type,
+                    "scrape": self._scrape,
+                    "library_type_folder": self._library_type_folder,
+                    "library_category_folder": self._library_category_folder,
+                    "source_type": self._source_type,
+                    "source_path": self._source_path,
+                    "target_type": self._target_type,
+                    "target_path": self._target_path,
                 }
-                logger.info(f"重新整理媒体库服务，立即运行一次，配置：{__c}")
-                self._scheduler = BackgroundScheduler(timezone=settings.TZ)
-                self._scheduler.add_job(
-                    func=self.__re_transfer,
-                    trigger="date",
-                    run_date=datetime.now(tz=pytz.timezone(settings.TZ))
-                    + timedelta(seconds=3),
-                    name="重新整理媒体库",
-                )
-                # 关闭一次性开关
-                self._onlyonce = False
-                self.update_config(
-                    {
-                        "onlyonce": False,
-                        "enabled": self._enabled,
-                        "background": self._background,
-                        "transfer_type": self._transfer_type,
-                        "scrape": self._scrape,
-                        "library_type_folder": self._library_type_folder,
-                        "library_category_folder": self._library_category_folder,
-                        "source_type": self._source_type,
-                        "source_path": self._source_path,
-                        "target_type": self._target_type,
-                        "target_path": self._target_path,
-                    }
-                )
-                if self._scheduler.get_jobs():
-                    # 启动服务
-                    self._scheduler.print_jobs()
-                    self._scheduler.start()
+            )
+            if self._scheduler.get_jobs():
+                # 启动服务
+                self._scheduler.print_jobs()
+                self._scheduler.start()
 
     def get_state(self) -> bool:
         return self._enabled
@@ -153,19 +148,6 @@ class ReTransfer(_PluginBase):
                                     {
                                         "component": "VSwitch",
                                         "props": {
-                                            "model": "enabled",
-                                            "label": "启用插件",
-                                        },
-                                    }
-                                ],
-                            },
-                            {
-                                "component": "VCol",
-                                "props": {"cols": 12, "md": 4},
-                                "content": [
-                                    {
-                                        "component": "VSwitch",
-                                        "props": {
                                             "model": "onlyonce",
                                             "label": "立即运行一次",
                                         },
@@ -180,7 +162,7 @@ class ReTransfer(_PluginBase):
                                         "component": "VSwitch",
                                         "props": {
                                             "model": "background",
-                                            "label": "后台刮削",
+                                            "label": "后台转移",
                                         },
                                     }
                                 ],
@@ -336,17 +318,11 @@ class ReTransfer(_PluginBase):
 
     def __re_transfer(self):
         """
-        开始刮削媒体库
+        开始重新整理媒体库
         """
-        if not all(
-            [
-                self._source_type,
-                self._source_path,
-                self._target_type,
-                self._target_path,
-            ]
-        ):
+        if not self._source_path or not self._target_path:
             logger.error(f"重新整理媒体库服务配置错误！")
+            self._enabled = False
             return
 
         start_time = time.time()
@@ -354,6 +330,10 @@ class ReTransfer(_PluginBase):
         sucess_count = 0
 
         for file in self.__list_files(self._source_type, self._source_path):
+            if self._event.is_set():
+                logger.info("重新整理服务已停止！")
+                self._enabled = False
+                return
             history = self.transferhis.get_by_src(
                 src=file.path, storage=self._source_type
             )
@@ -386,6 +366,7 @@ class ReTransfer(_PluginBase):
         logger.info(
             f"重新整理完成。成功{sucess_count}条，失败{error_count}条！总耗时{(time.time()-start_time) / 60 :2f}分钟"
         )
+        self._enabled = False
 
     def __list_files(
         self,
