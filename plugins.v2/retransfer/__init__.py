@@ -25,7 +25,7 @@ class ReTransfer(_PluginBase):
     # 插件图标
     plugin_icon = "directory.png"
     # 插件版本
-    plugin_version = "0.8-2"
+    plugin_version = "0.8-3"
     # 插件作者
     plugin_author = "Akimio521"
     # 作者主页
@@ -114,6 +114,8 @@ class ReTransfer(_PluginBase):
             self.update_config(
                 {
                     "onlyonce": self._onlyonce,
+                    "background": self._background,
+                    "notify": self._notify,
                     "transfer_type": self._transfer_type,
                     "scrape": self._scrape,
                     "library_type_folder": self._library_type_folder,
