@@ -25,7 +25,7 @@ class ReTransfer(_PluginBase):
     # 插件图标
     plugin_icon = "directory.png"
     # 插件版本
-    plugin_version = "0.8-1"
+    plugin_version = "0.8-2"
     # 插件作者
     plugin_author = "Akimio521"
     # 作者主页
@@ -46,7 +46,7 @@ class ReTransfer(_PluginBase):
 
     _onlyonce: bool  # 立即运行
     _background: bool  # 后台转移
-    _notify: bool  # 完成通知
+    _notify: bool  # 通知推送
 
     _transfer_type: str  # 转移模式
     _scrape: bool  # 是否刮削
@@ -83,6 +83,7 @@ class ReTransfer(_PluginBase):
         if self._onlyonce:
             __c = {
                 "后台转移": self._background,
+                "通知推送": self._notify,
                 "转移模式": self._transfer_type,
                 "是否刮削": self._scrape,
                 "是否按类型建立文件夹": self._library_type_folder,
@@ -93,6 +94,12 @@ class ReTransfer(_PluginBase):
                 "新媒体库路径": self._target_path,
             }
             logger.info(f"重新整理媒体库服务，立即运行一次，配置：{__c}")
+            if self._notify:
+                self.post_message(
+                    mtype=NotificationType.Plugin,
+                    title="【插件】重新整理开始运行",
+                    text="\n".join([f"{k}：\t\t{v}" for k, v in __c.items()]),
+                )
             self._enabled = True
             self._scheduler = BackgroundScheduler(timezone=settings.TZ)
             self._scheduler.add_job(
@@ -164,7 +171,7 @@ class ReTransfer(_PluginBase):
                                         "component": "VSwitch",
                                         "props": {
                                             "model": "notify",
-                                            "label": "完成通知",
+                                            "label": "通知推送",
                                         },
                                     }
                                 ],
