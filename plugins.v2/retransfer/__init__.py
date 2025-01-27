@@ -25,7 +25,7 @@ class ReTransfer(_PluginBase):
     # 插件图标
     plugin_icon = "directory.png"
     # 插件版本
-    plugin_version = "0.8-3"
+    plugin_version = "0.8-4"
     # 插件作者
     plugin_author = "Akimio521"
     # 作者主页
@@ -81,26 +81,6 @@ class ReTransfer(_PluginBase):
 
         # 立即运行一次
         if self._onlyonce:
-            __c = {
-                "后台转移": self._background,
-                "通知推送": self._notify,
-                "转移模式": self._transfer_type,
-                "是否刮削": self._scrape,
-                "是否按类型建立文件夹": self._library_type_folder,
-                "是否按分类建立文件夹": self._library_category_folder,
-                "原媒体库类型": self._source_type,
-                "原媒体库路径": self._source_path,
-                "新媒体库类型": self._target_type,
-                "新媒体库路径": self._target_path,
-            }
-            logger.info(f"重新整理媒体库服务，立即运行一次，配置：{__c}")
-            if self._notify:
-                self.post_message(
-                    mtype=NotificationType.Plugin,
-                    title="【插件】重新整理开始运行",
-                    text="\n".join([f"{k}：\t\t{v}" for k, v in __c.items()]),
-                )
-            self._enabled = True
             self._scheduler = BackgroundScheduler(timezone=settings.TZ)
             self._scheduler.add_job(
                 func=self.__re_transfer,
@@ -344,14 +324,32 @@ class ReTransfer(_PluginBase):
         """
         开始重新整理媒体库
         """
+        self._enabled = True
+        __c: Dict[str, str | bool] = {
+            "后台转移": self._background,
+            "通知推送": self._notify,
+            "转移模式": self._transfer_type,
+            "是否刮削": self._scrape,
+            "按类型建立文件夹": self._library_type_folder,
+            "按分类建立文件夹": self._library_category_folder,
+            "源路径": f"【{StorageSchema(self._source_type)}】{self._source_path}",
+            "新媒体库": f"【{StorageSchema(self._target_type)}】{self._target_path}",
+        }
+        logger.info(f"重新整理媒体库服务，立即运行一次，配置：{__c}")
+        if self._notify:
+            self.post_message(
+                mtype=NotificationType.Plugin,
+                title="【插件】重新整理开始运行",
+                text="\n".join([f"{k}：{v}" for k, v in __c.items()]),
+            )
         if not self._source_path or not self._target_path:
             logger.error(f"重新整理媒体库服务配置错误！")
             self._enabled = False
             return
 
         start_time = time.time()
-        error_count = 0
         sucess_count = 0
+        err_msgs: List[str] = []
 
         for file in self.__list_files(self._source_type, self._source_path):
             if self._event.is_set():
@@ -382,13 +380,19 @@ class ReTransfer(_PluginBase):
             if response.success:
                 sucess_count += 1
             else:
-                error_count += 1
-                logger.warning(f"{history.src}重新整理失败：{response.message}")
+                err_msgs.append(
+                    f"【{self._source_type}】{file.path}：{response.message}"
+                )
+                logger.warning(
+                    f"【{self._source_type}】{file.path}：{response.message}"
+                )
 
         msg: List[str] = [
             f"成功整理 {sucess_count} 条",
-            f"失败整理 {error_count} 条",
-            f"总耗时 {(time.time()-start_time) / 60 :2f} 分钟",
+            f"失败整理 {len(err_msgs)} 条",
+            f"总耗时 {((time.time()-start_time) / 60 ):.2f} 分钟",
+            "错误信息：",
+            *err_msgs,
         ]
         logger.info(f"重新整理完成，{'、'.join(msg)}。")
         if self._notify:
