@@ -25,7 +25,7 @@ class ReTransfer(_PluginBase):
     # 插件图标
     plugin_icon = "directory.png"
     # 插件版本
-    plugin_version = "0.8-4"
+    plugin_version = "0.9"
     # 插件作者
     plugin_author = "Akimio521"
     # 作者主页
@@ -45,8 +45,9 @@ class ReTransfer(_PluginBase):
     _enabled: bool = False  # 运行状态
 
     _onlyonce: bool  # 立即运行
-    _background: bool  # 后台转移
     _notify: bool  # 通知推送
+    _skip_failed: bool  # 跳过失败记录
+    _background: bool  # 后台转移
 
     _transfer_type: str  # 转移模式
     _scrape: bool  # 是否刮削
@@ -63,8 +64,9 @@ class ReTransfer(_PluginBase):
         # 读取配置
         if config:
             self._onlyonce = config.get("onlyonce") or False
-            self._background = config.get("background") or True
             self._notify = config.get("notify") or False
+            self._skip_failed = config.get("skip_failed") or False
+            self._background = config.get("background") or False
             self._transfer_type = config.get("transfer_type") or "copy"
             self._scrape = config.get("scrape") or False
             self._library_type_folder = config.get("library_type_folder") or False
@@ -94,8 +96,9 @@ class ReTransfer(_PluginBase):
             self.update_config(
                 {
                     "onlyonce": self._onlyonce,
-                    "background": self._background,
                     "notify": self._notify,
+                    "skip_failed": self._skip_failed,
+                    "background": self._background,
                     "transfer_type": self._transfer_type,
                     "scrape": self._scrape,
                     "library_type_folder": self._library_type_folder,
@@ -134,20 +137,20 @@ class ReTransfer(_PluginBase):
                         "content": [
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 4},
+                                "props": {"cols": 12, "md": 3},
                                 "content": [
                                     {
                                         "component": "VSwitch",
                                         "props": {
                                             "model": "onlyonce",
-                                            "label": "立即运行一次",
+                                            "label": "立即运行",
                                         },
                                     }
                                 ],
                             },
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 4},
+                                "props": {"cols": 12, "md": 3},
                                 "content": [
                                     {
                                         "component": "VSwitch",
@@ -160,7 +163,20 @@ class ReTransfer(_PluginBase):
                             },
                             {
                                 "component": "VCol",
-                                "props": {"cols": 12, "md": 4},
+                                "props": {"cols": 12, "md": 3},
+                                "content": [
+                                    {
+                                        "component": "VSwitch",
+                                        "props": {
+                                            "model": "skip_failed",
+                                            "label": "跳过失败记录",
+                                        },
+                                    }
+                                ],
+                            },
+                            {
+                                "component": "VCol",
+                                "props": {"cols": 12, "md": 3},
                                 "content": [
                                     {
                                         "component": "VSwitch",
@@ -327,13 +343,14 @@ class ReTransfer(_PluginBase):
         self._enabled = True
         __c: Dict[str, str | bool] = {
             "后台转移": self._background,
+            "跳过失败记录": self._skip_failed,
             "通知推送": self._notify,
             "转移模式": self._transfer_type,
             "是否刮削": self._scrape,
             "按类型建立文件夹": self._library_type_folder,
             "按分类建立文件夹": self._library_category_folder,
-            "源路径": f"【{StorageSchema(self._source_type)}】{self._source_path}",
-            "新媒体库": f"【{StorageSchema(self._target_type)}】{self._target_path}",
+            "源路径": f"【{StorageSchema(self._source_type).name}】{self._source_path}",
+            "新媒体库": f"【{StorageSchema(self._target_type).name}】{self._target_path}",
         }
         logger.info(f"重新整理媒体库服务，立即运行一次，配置：{__c}")
         if self._notify:
@@ -348,7 +365,8 @@ class ReTransfer(_PluginBase):
             return
 
         start_time = time.time()
-        sucess_count = 0
+        sucess_count: int = 0
+        skip_msgs: List[str] = []
         err_msgs: List[str] = []
 
         for file in self.__list_files(self._source_type, self._source_path):
@@ -360,7 +378,15 @@ class ReTransfer(_PluginBase):
                 src=file.path, storage=self._source_type
             )
             if not history:
-                logger.warning(f"【{self._source_type}】{file.path}未找到整理记录！")
+                skip_msgs.append(
+                    f"【{StorageSchema(self._source_type).name}】{file.path}：未找到整理记录"
+                )
+                continue
+
+            if self._skip_failed and not history.status:
+                skip_msgs.append(
+                    f"【{StorageSchema(self._source_type).name}】{file.path}：{history.errmsg}"
+                )
                 continue
 
             transer_item = ManualTransferItem(
@@ -381,10 +407,7 @@ class ReTransfer(_PluginBase):
                 sucess_count += 1
             else:
                 err_msgs.append(
-                    f"【{self._source_type}】{file.path}：{response.message}"
-                )
-                logger.warning(
-                    f"【{self._source_type}】{file.path}：{response.message}"
+                    f"【{StorageSchema(self._source_type).name}】{file.path}：{response.message}"
                 )
 
         msg: List[str] = [
@@ -393,8 +416,10 @@ class ReTransfer(_PluginBase):
             f"总耗时 {((time.time()-start_time) / 60 ):.2f} 分钟",
             "错误信息：",
             *err_msgs,
+            "跳过信息：",
+            *skip_msgs,
         ]
-        logger.info(f"重新整理完成，{'、'.join(msg)}。")
+        logger.info(f"重新整理完成，{'；'.join(msg)}。")
         if self._notify:
             self.post_message(
                 mtype=NotificationType.Plugin,
