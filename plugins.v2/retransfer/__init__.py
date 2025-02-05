@@ -25,7 +25,7 @@ class ReTransfer(_PluginBase):
     # 插件图标
     plugin_icon = "directory.png"
     # 插件版本
-    plugin_version = "0.9"
+    plugin_version = "0.9-1"
     # 插件作者
     plugin_author = "Akimio521"
     # 作者主页
@@ -413,19 +413,22 @@ class ReTransfer(_PluginBase):
         msg: List[str] = [
             f"成功整理 {sucess_count} 条",
             f"失败整理 {len(err_msgs)} 条",
-            f"总耗时 {((time.time()-start_time) / 60 ):.2f} 分钟",
-            "错误信息：",
-            *err_msgs,
-            "跳过信息：",
-            *skip_msgs,
+            f"跳过整理 {len(skip_msgs)} 条",
+            f"总耗时 {((time.time()-start_time) / 60 ):.2f} 分钟"
         ]
-        logger.info(f"重新整理完成，{'；'.join(msg)}。")
         if self._notify:
             self.post_message(
                 mtype=NotificationType.Plugin,
                 title="【插件】重新整理完成",
                 text="\n".join(msg),
             )
+        msg.extend(["错误信息：",
+            *err_msgs,
+            "跳过信息：",
+            *skip_msgs,
+        ])
+        logger.info(f"重新整理完成，{'；'.join(msg)}。")
+        
         self._enabled = False
 
     def __list_files(
