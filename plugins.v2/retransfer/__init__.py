@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from threading import Event
-from typing import List, Tuple, Dict, Any, Optional, Generator
+from typing import List, Tuple, Dict, Any, Optional
 import time
 
 import pytz
@@ -25,7 +25,7 @@ class ReTransfer(_PluginBase):
     # 插件图标
     plugin_icon = "directory.png"
     # 插件版本
-    plugin_version = "0.9-1"
+    plugin_version = "0.9-2"
     # 插件作者
     plugin_author = "Akimio521"
     # 作者主页
@@ -414,7 +414,7 @@ class ReTransfer(_PluginBase):
             f"成功整理 {sucess_count} 条",
             f"失败整理 {len(err_msgs)} 条",
             f"跳过整理 {len(skip_msgs)} 条",
-            f"总耗时 {((time.time()-start_time) / 60 ):.2f} 分钟"
+            f"总耗时 {((time.time()-start_time) / 60 ):.2f} 分钟",
         ]
         if self._notify:
             self.post_message(
@@ -422,34 +422,36 @@ class ReTransfer(_PluginBase):
                 title="【插件】重新整理完成",
                 text="\n".join(msg),
             )
-        msg.extend(["错误信息：",
-            *err_msgs,
-            "跳过信息：",
-            *skip_msgs,
-        ])
+        msg.extend(
+            [
+                "错误信息：",
+                *err_msgs,
+                "跳过信息：",
+                *skip_msgs,
+            ]
+        )
         logger.info(f"重新整理完成，{'；'.join(msg)}。")
-        
+
         self._enabled = False
 
     def __list_files(
         self,
         storage_type: str,
         starge_path: str,
-    ) -> Generator[FileItem, None, None]:
+    ) -> List[FileItem]:
         file = FileItem(storage=storage_type, path=starge_path)
         files = self.storagechain.list_files(file, True)
-        if not files:
-            return None
-        for f in files:
-            if (
-                f.type
-                and f.type.lower() == "file"
+        if not files or len(files) == 0:
+            logger.error(f"未找到文件：【{storage_type}】{starge_path}")
+            return []
+        else:
+            return [
+                f
+                for f in files
+                if f.type == "file"
                 and f.extension
                 and f".{f.extension.lower()}" in settings.RMT_MEDIAEXT
-            ):
-                yield f
-            else:
-                logger.debug(f"忽略文件：【{storage_type}】{f.path}")
+            ]
 
     def stop_service(self):
         """
