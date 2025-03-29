@@ -414,7 +414,7 @@ class ReTransfer(_PluginBase):
             f"成功整理 {sucess_count} 条",
             f"失败整理 {len(err_msgs)} 条",
             f"跳过整理 {len(skip_msgs)} 条",
-            f"总耗时 {((time.time()-start_time) / 60 ):.2f} 分钟",
+            f"总耗时 {((time.time() - start_time) / 60):.2f} 分钟",
         ]
         if self._notify:
             self.post_message(
