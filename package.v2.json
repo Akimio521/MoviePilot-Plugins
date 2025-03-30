@@ -29,12 +29,13 @@
         "name": "媒体库刮削更新",
         "description": "更新刮削近期已成功入库电影/电视剧，补全缺失信息。",
         "labels": "媒体库工具",
-        "version": "1.0",
+        "version": "1.1",
         "icon": "scraper.png",
         "author": "Akimio521",
         "level": 2,
         "history": {
-            "v1.0": "实现基础功"
+            "v1.1": "优化通知信息格式",
+            "v1.0": "实现基础功能"
         }
     }
 }

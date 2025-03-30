@@ -25,7 +25,7 @@ class LibraryScrapeUpdate(_PluginBase):
     # 插件图标
     plugin_icon = "scraper.png"
     # 插件版本
-    plugin_version = "1.0"
+    plugin_version = "1.1"
     # 插件作者
     plugin_author = "Akimio521"
     # 作者主页
@@ -319,8 +319,7 @@ class LibraryScrapeUpdate(_PluginBase):
                 mtype=NotificationType.Plugin,
                 title="【插件】媒体刮削更新运行结束",
                 text=f"媒体库：【{StorageSchema(self._target_type).name}】{self._target_path}\n更新入库时间晚于 {date} 的文件\n运行耗时：{waste_time}\n更新任务数：{len(msgs)}"
-                + "\n\n更新文件列表：\n"
-                + "\n".join(msgs)
+                + ("\n\n更新文件列表：\n" + "\n".join(msgs))
                 if self._detail_notify
                 else "",
             )
