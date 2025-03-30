@@ -24,5 +24,17 @@
             "v0.2": "修复变量名错误",
             "v0.1": "测试版本"
         }
+    },
+    "LibraryScrapeUpdate": {
+        "name": "媒体库刮削更新",
+        "description": "更新刮削近期已成功入库电影/电视剧，补全缺失信息。",
+        "labels": "媒体库工具",
+        "version": "1.0",
+        "icon": "scraper.png",
+        "author": "Akimio521",
+        "level": 2,
+        "history": {
+            "v1.0": "实现基础功"
+        }
     }
 }
