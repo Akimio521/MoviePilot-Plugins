@@ -25,7 +25,7 @@ class ReTransfer(_PluginBase):
     # 插件图标
     plugin_icon = "directory.png"
     # 插件版本
-    plugin_version = "0.9-2"
+    plugin_version = "1.0"
     # 插件作者
     plugin_author = "Akimio521"
     # 作者主页
@@ -360,7 +360,7 @@ class ReTransfer(_PluginBase):
                 text="\n".join([f"{k}：{v}" for k, v in __c.items()]),
             )
         if not self._source_path or not self._target_path:
-            logger.error(f"重新整理媒体库服务配置错误！")
+            logger.error("重新整理媒体库服务配置错误！")
             self._enabled = False
             return
 
